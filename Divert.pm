@@ -1,9 +1,9 @@
 ##
-##  String::Divert - Diversion String Object
-##  Copyright (c) 2003 Ralf S. Engelschall <rse@engelschall.com> 
+##  String::Divert - String Object supporting Folding and Diversion
+##  Copyright (c) 2003 Ralf S. Engelschall <rse@engelschall.com>
 ##
-##  This file is part of String::Divert, a Perl module for
-##  dealing with strings containing nested diversions.
+##  This file is part of String::Divert, a Perl module providing
+##  a string object supporting folding and diversion.
 ##
 ##  This program is free software; you can redistribute it and/or
 ##  modify it under the terms of the GNU General Public  License
@@ -22,7 +22,7 @@
 ##  Divert.pm: Module Implementation
 ##
 
-use 5.005;
+use 5.006;
 use strict;
 use warnings;
 
@@ -36,14 +36,15 @@ package String::Divert;
 
 require Exporter;
 
+our $VERSION   = '0.91';
+
 our @ISA       = qw(Exporter);
-our @EXPORT_OK = qw(new destroy DESTROY 
+our @EXPORT_OK = qw(new destroy DESTROY
                     name overwrite
                     assign append string bool
                     fold unfold folding folder
                     divert undivert diversion
                     overload);
-our $VERSION   = '0.90';
 
 #   object construction
 sub new ($;$) {
@@ -74,7 +75,7 @@ sub destroy ($) {
 #   object destruction (implicit)
 sub DESTROY ($) {
     return;
-}   
+}
 
 #   operation: set/get name of object
 sub name ($;$) {
@@ -148,7 +149,7 @@ sub append ($$) {
         if (not defined($string));
     die "cannot assign reference as string"
         if (ref($string));
-    if (   $self->{overwrite} eq 'once' 
+    if (   $self->{overwrite} eq 'once'
         or $self->{overwrite} eq 'always') {
         $self->{chunks} = [];
         foreach my $chunk ($self->_chunking($string)) {

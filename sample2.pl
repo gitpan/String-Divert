@@ -26,10 +26,10 @@ $html << 1;
 $html >> "body";
 $html .= "<table>\n" .
          "  <tr>\n" .
-         "   <td>\n" . 
-         "     " . $html->folder("left") . 
+         "   <td>\n" .
+         "     " . $html->folder("left") .
          "   </td>\n" .
-         "   <td>\n" . 
+         "   <td>\n" .
          "     " . $html->folder("right") .
          "   </td>\n" .
          "  </tr>\n" .

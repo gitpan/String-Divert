@@ -1,9 +1,9 @@
 ##
-##  String::Divert - Diversion String Object
-##  Copyright (c) 2003 Ralf S. Engelschall <rse@engelschall.com> 
+##  String::Divert - String Object supporting Folding and Diversion
+##  Copyright (c) 2003 Ralf S. Engelschall <rse@engelschall.com>
 ##
-##  This file is part of String::Divert, a Perl module for
-##  dealing with strings containing nested diversions.
+##  This file is part of String::Divert, a Perl module providing
+##  a string object supporting folding and diversion.
 ##
 ##  This program is free software; you can redistribute it and/or
 ##  modify it under the terms of the GNU General Public  License
@@ -26,7 +26,7 @@
 
 =head1 NAME
 
-B<String::Divert> - String Object with Folding and Diversions
+B<String::Divert> - String Object supporting Folding and Diversions
 
 =head1 SYNOPSIS
 
@@ -57,24 +57,50 @@ B<String::Divert> - String Object with Folding and Diversions
 
 =head1 ABSTRACT
 
-B<String::Divert> is small Perl 5 module providing a scalar-like
-string object with some overloaded operators, providing the concept of
-I<Diversions> for supporting nested output generation.
-
-=head1 DESCRIPTION
-
-B<String::Divert> is small Perl 5 module providing a scalar-like
-string object with some overloaded operators, providing the concept of
-I<Diversions>. This supports the nested generation of structured outputs.
-The idea is to decouple the sequential generation of structured output
+B<String::Divert> is small Perl 5 module providing a scalar-like string
+object with some overloaded operators, supporting the concept of
+I<Folding> and I<Diversion>. This allows nested generation of structured
+output. The idea is to decouple the sequential generation of output
 from the nested and non-sequential structure of the output.
 
-=head1 APPLICATION PROGRAMMING INTERFACE (API)
+The two most prominent examples are the generation of code in SGML/XML
+based languages like [X]HTML (where large and deeply nested structures
+occur) and the generation of code in typed 3GL procedural languages
+like C/C++ (where symbols have to be declared before usage). Here
+B<String::Divert> allows you to generate the code in steps from the
+outer to the inner level or to append code to already generated previous
+or later inserted parts.
+
+This is achieved by leveraging two basic concepts: content folding
+and operation diversion.
+
+=head2 Content Folding
+
+The concept of content folding allows you to fold the content at the
+current output position by inserting a placeholder corresponding to
+a sub-output and just proceeding with the output generation. The
+sub-output initially is empty. Once output is appended to it (see
+diversion below), it will occur at the placeholder position if the
+content is unfolded later. Folding can be applied to the sub-object
+again and this way allowing arbitrary nested structures. A sub-output
+even can be unfolded into multiple placeholder positions.
+
+=head2 Operation Diversion
+
+The concept of operation diversion allows you to automatically divert
+an operation to one object to another object. Usually this is used for
+diverting output generation operations on a top-level string object
+to folded sub-objects without having to deal with multiple object
+variables and without having to know that you are actually operating on
+a sub-object. Diversions are applied in a stacked fashion, allowing the
+stepping back to the previous active diversion.
+
+=head1 DESCRIPTION
 
 B<String::Divert> provides two Application Programming Interfaces (API):
 a standard object-oriented API (SAPI) providing the core functionality
 and an extended operator-overloading API (XAPI) providing additional
-convinience in using the functionality (see also method B<overload>).
+convenience in using the functionality (see also method B<overload>).
 
 =head2 Object Lifetime
 
@@ -184,7 +210,7 @@ object:
 
 =item XAPI: C<$x E<gt>E<gt> $y;>
 
-I<Content Folding>. This folds the contents of string cobject C<$x> at
+I<Content Folding>. This folds the contents of string object C<$x> at
 the current position by appending a B<String::Divert> sub object (given
 in existing object C<$y> or created on-the-fly with name I<name>). The
 sub-object representing the folding is allowed to be re-appended by name
@@ -272,7 +298,7 @@ the structured HTML code in a nested, clean and intuitive fashion:
  use String::Divert;
  my $html = new String::Divert;
  $html->overload(1);
- 
+
  #   generate outer HTML framework
  $html .=
      "<html>\n" .
@@ -283,39 +309,39 @@ the structured HTML code in a nested, clean and intuitive fashion:
      "    " . $html->folder("body") .
      "  </body>\n" .
      "</html>\n";
- 
+
  #   generate header
  $html >> "head";
  $html .= "<title>foo</title>\n";
  $html << 1;
- 
+
  #   generate body
  $html >> "body";
  $html .= "<table>\n" .
           "  <tr>\n" .
-          "   <td>\n" . 
-          "     " . $html->folder("left") . 
+          "   <td>\n" .
+          "     " . $html->folder("left") .
           "   </td>\n" .
-          "   <td>\n" . 
+          "   <td>\n" .
           "     " . $html->folder("right") .
           "   </td>\n" .
           "  </tr>\n" .
           "</table>\n";
- 
+
  #   generate left contents
  $html >> "left";
  $html .= "bar1\n" .
           "bar2\n";
- 
+
  #   generate right contents
  $html >> "right";
  $html .= "quux1\n" .
           "quux2\n";
- 
+
  #   undivert all diversions and output unfolded HTML
  $html << 0;
  print $html;
- 
+
  #   destroy object
  $html->destroy;
 
@@ -345,9 +371,9 @@ The output of this program obviously is:
 
 =over 0
 
-=item B<m4>'s C<divert()> function. 
+=item B<m4>'s C<divert()> function.
 
-=item B<Perl> module B<Data::Location>. 
+=item B<Perl> module B<Data::Location>.
 
 =item B<WML>'s C<wml_p5_divert> filter.
 

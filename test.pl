@@ -1,9 +1,9 @@
 ##
-##  String::Divert - Diversion String Object
-##  Copyright (c) 2003 Ralf S. Engelschall <rse@engelschall.com> 
+##  String::Divert - String Object supporting Folding and Diversion
+##  Copyright (c) 2003 Ralf S. Engelschall <rse@engelschall.com>
 ##
-##  This file is part of String::Divert, a Perl module for
-##  dealing with strings containing nested diversions.
+##  This file is part of String::Divert, a Perl module providing
+##  a string object supporting folding and diversion.
 ##
 ##  This program is free software; you can redistribute it and/or
 ##  modify it under the terms of the GNU General Public  License
@@ -22,6 +22,7 @@
 ##  test.pl: Module Test Suite
 ##
 
+use 5.006;
 use Test::More tests => 36;
 
 #   test: module loading
