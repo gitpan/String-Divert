@@ -36,11 +36,11 @@ package String::Divert;
 
 require Exporter;
 
-our $VERSION   = '0.91';
+our $VERSION   = '0.92';
 
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw(new destroy DESTROY
-                    name overwrite
+                    name overwrite storage
                     assign append string bool
                     fold unfold folding folder
                     divert undivert diversion
@@ -56,6 +56,7 @@ sub new ($;$) {
 
     $self->{name}      = (defined($name) ? $name : '');
     $self->{overwrite} = 'none';
+    $self->{storage}   = 'all';
     $self->{chunks}    = [ '' ];
     $self->{diversion} = [];
     $self->{foldermk}  = '{#%s#}';
@@ -103,6 +104,20 @@ sub overwrite ($;$) {
     return $old_mode;
 }
 
+#   operation: set/get storage mode
+sub storage ($;$) {
+    my ($self, $mode) = @_;
+    return $self->{diversion}->[-1]->storage($mode)
+        if (@{$self->{diversion}} > 0);
+    my $old_mode = $self->{storage};
+    if (defined($mode)) {
+        die "invalid mode argument"
+            if ($mode !~ m/^(none|fold|all)$/);
+        $self->{storage} = $mode;
+    }
+    return $old_mode;
+}
+
 #   internal: split string into chunks
 sub _chunking ($) {
     my ($self, $string) = @_;
@@ -110,17 +125,19 @@ sub _chunking ($) {
     my $folderre = $self->{folderre};
     while ($string =~ m/${folderre}()/s) {
         my ($prolog, $id) = ($`, $1);
-        push(@chunks, $prolog) if ($prolog ne '');
+        push(@chunks, $prolog) if ($prolog ne '' and $self->{storage} !~ m/^(none|fold)/);
         die "empty folding object name"
             if ($id eq '');
-        my $object = $self->folding($id);
-        $object = $self->new($id) if (not defined($object));
-        die "cannot reuse or create folding sub object \"$id\""
-            if (not defined($object));
-        push(@chunks, $object);
+        if ($self->{storage} ne 'none') {
+            my $object = $self->folding($id);
+            $object = $self->new($id) if (not defined($object));
+            die "cannot reuse or create folding sub object \"$id\""
+                if (not defined($object));
+            push(@chunks, $object);
+        }
         $string = $';
     }
-    push(@chunks, $string) if ($string ne '');
+    push(@chunks, $string) if ($string ne '' and $self->{storage} !~ m/^(none|fold)/);
     return @chunks;
 }
 
@@ -185,7 +202,11 @@ sub string ($) {
     foreach my $chunk (@{$self->{chunks}}) {
         if (ref($chunk)) {
             my $prefix = '';
-            if ($string =~ m|([^\n]*)(\r?\n)*$|s) {
+            #   check for existing prefix
+            #   (keep in mind that m|([^\n]+)$|s _DOES NOT_
+            #   take a possibly existing terminating newline
+            #   into account, so we really need an extra match!)
+            if ($string =~ m|([^\n]+)$|s and $string !~ m|\n$|s) {
                 $prefix = $1;
                 $prefix =~ s|[^ \t]| |sg;
             }
@@ -225,6 +246,7 @@ sub fold ($$) {
         if (@{$self->{diversion}} > 0);
     die "undefined folding object identifier"
         if (not defined($id));
+    return undef if ($self->{storage} eq 'none');
     if (ref($id)) {
         die "folding object not of class String::Divert"
             if (   UNIVERSAL::isa($id, "String::Divert")
@@ -314,6 +336,7 @@ sub folder ($$;$) {
     }
     else {
         #   create folder
+        return "" if ($self->{storage} eq 'none');
         my $folder = sprintf($self->{foldermk}, $a);
         return $folder;
     }
@@ -333,6 +356,14 @@ sub divert ($$) {
 sub undivert ($;$) {
     my ($self, $num) = @_;
     $num = 1 if (not defined($num));
+    if ($num !~ m|^\d+$|) {
+        my $name = $num;
+        for ($num = 1; $num <= @{$self->{diversion}}; $num++) {
+            last if ($self->{diversion}->[-$num]->{name} eq $name);
+        }
+        die "no object named \"$name\" found for undiversion"
+            if ($num > @{$self->{diversion}});
+    }
     $num = @{$self->{diversion}} if ($num == 0);
     die "less number (".scalar(@{$self->{diversion}}).") of diversions active than requested ($num) to undivert"
         if ($num > @{$self->{diversion}});
