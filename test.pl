@@ -23,7 +23,7 @@
 ##
 
 use 5.006;
-use Test::More tests => 36;
+use Test::More tests => 37;
 
 #   test: module loading
 BEGIN { use_ok('String::Divert') };
@@ -131,4 +131,9 @@ $x >> "baz";
 $x .= "baz";
 $x << 0;
 ok("$x" eq "foobarbazquux", "diversion");
+
+#   configuring folder patters
+$x->assign("x");
+$x->folder('{#%s#}', '\{#([a-zA-Z_][a-zA-Z0-9_.-]*)#\}');
+ok("$x" eq "x", "folder pattern 1");
 

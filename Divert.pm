@@ -36,7 +36,7 @@ package String::Divert;
 
 require Exporter;
 
-our $VERSION   = '0.92';
+our $VERSION   = '0.93';
 
 our @ISA       = qw(Exporter);
 our @EXPORT_OK = qw(new destroy DESTROY
@@ -327,9 +327,9 @@ sub folder ($$;$) {
     if (defined($b)) {
         #   configure folder
         my $test = sprintf($a, "foo");
-        my $id = ($test =~ m|${b}()|s);
+        my ($id) = ($test =~ m|${b}()|s);
         die "folder construction format and matching regular expression do not correspond"
-            if ($id ne "foo");
+            if (not defined($id) or (defined($id) and $id ne "foo"));
         $self->{foldermk} = $a;
         $self->{folderre} = $b;
         return;
