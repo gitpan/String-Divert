@@ -1,6 +1,6 @@
 ##
 ##  String::Divert - String Object supporting Folding and Diversion
-##  Copyright (c) 2003 Ralf S. Engelschall <rse@engelschall.com>
+##  Copyright (c) 2003-2005 Ralf S. Engelschall <rse@engelschall.com>
 ##
 ##  This file is part of String::Divert, a Perl module providing
 ##  a string object supporting folding and diversion.
@@ -23,7 +23,7 @@
 ##
 
 use 5.006;
-use Test::More tests => 37;
+use Test::More tests => 38;
 
 #   test: module loading
 BEGIN { use_ok('String::Divert') };
@@ -38,6 +38,8 @@ ok($x->name() eq "", "object name");
 $x->name("xx");
 ok($x->name() eq "xx", "overwritten object name");
 $x->name("x");
+my $y = $x->clone();
+ok($x != $y, "cloning");
 
 #   test: simple content
 ok($x->string() eq "", "empty initial content");

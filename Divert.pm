@@ -1,6 +1,6 @@
 ##
 ##  String::Divert - String Object supporting Folding and Diversion
-##  Copyright (c) 2003 Ralf S. Engelschall <rse@engelschall.com>
+##  Copyright (c) 2003-2005 Ralf S. Engelschall <rse@engelschall.com>
 ##
 ##  This file is part of String::Divert, a Perl module providing
 ##  a string object supporting folding and diversion.
@@ -22,10 +22,6 @@
 ##  Divert.pm: Module Implementation
 ##
 
-use 5.006;
-use strict;
-use warnings;
-
 #   _________________________________________________________________________
 #
 #   STANDARD OBJECT ORIENTED API
@@ -34,17 +30,18 @@ use warnings;
 
 package String::Divert;
 
+use 5.006;
+use strict;
+use warnings;
+
+use Carp;
 require Exporter;
 
-our $VERSION   = '0.93';
+our $VERSION   = '0.94';
 
 our @ISA       = qw(Exporter);
-our @EXPORT_OK = qw(new destroy DESTROY
-                    name overwrite storage
-                    assign append string bool
-                    fold unfold folding folder
-                    divert undivert diversion
-                    overload);
+our @EXPORT    = qw();
+our @EXPORT_OK = qw();
 
 #   object construction
 sub new ($;$) {
@@ -57,6 +54,7 @@ sub new ($;$) {
     $self->{name}      = (defined($name) ? $name : '');
     $self->{overwrite} = 'none';
     $self->{storage}   = 'all';
+    $self->{copying}   = 'pass';
     $self->{chunks}    = [ '' ];
     $self->{diversion} = [];
     $self->{foldermk}  = '{#%s#}';
@@ -78,6 +76,19 @@ sub DESTROY ($) {
     return;
 }
 
+#   clone object
+sub clone ($) {
+    my ($self) = @_;
+    my $ov = $self->overload();
+    $self->overload(0);
+    eval { require Storable; };
+    croak "required module \"Storable\" not installed" if ($@);
+    my $clone = Storable::dclone($self);
+    $self->overload($ov);
+    $clone->overload($ov);
+    return $clone;
+}
+
 #   operation: set/get name of object
 sub name ($;$) {
     my ($self, $name) = @_;
@@ -97,7 +108,7 @@ sub overwrite ($;$) {
         if (@{$self->{diversion}} > 0);
     my $old_mode = $self->{overwrite};
     if (defined($mode)) {
-        die "invalid mode argument"
+        croak "invalid mode argument"
             if ($mode !~ m/^(none|once|always)$/);
         $self->{overwrite} = $mode;
     }
@@ -111,9 +122,21 @@ sub storage ($;$) {
         if (@{$self->{diversion}} > 0);
     my $old_mode = $self->{storage};
     if (defined($mode)) {
-        die "invalid mode argument"
+        croak "invalid mode argument"
             if ($mode !~ m/^(none|fold|all)$/);
         $self->{storage} = $mode;
+    }
+    return $old_mode;
+}
+
+#   operation: set/get copy constructor mode
+sub copying ($;$) {
+    my ($self, $mode) = @_;
+    my $old_mode = $self->{copying};
+    if (defined($mode)) {
+        croak "invalid mode argument"
+            if ($mode !~ m/^(clone|pass)$/);
+        $self->{copying} = $mode;
     }
     return $old_mode;
 }
@@ -126,12 +149,12 @@ sub _chunking ($) {
     while ($string =~ m/${folderre}()/s) {
         my ($prolog, $id) = ($`, $1);
         push(@chunks, $prolog) if ($prolog ne '' and $self->{storage} !~ m/^(none|fold)/);
-        die "empty folding object name"
+        croak "empty folding object name"
             if ($id eq '');
         if ($self->{storage} ne 'none') {
             my $object = $self->folding($id);
             $object = $self->new($id) if (not defined($object));
-            die "cannot reuse or create folding sub object \"$id\""
+            croak "cannot reuse or create folding sub object \"$id\""
                 if (not defined($object));
             push(@chunks, $object);
         }
@@ -146,9 +169,9 @@ sub assign ($$) {
     my ($self, $string) = @_;
     return $self->{diversion}->[-1]->assign($string)
         if (@{$self->{diversion}} > 0);
-    die "cannot assign undefined string"
+    croak "cannot assign undefined string"
         if (not defined($string));
-    die "cannot assign reference ".ref($string)." as string"
+    croak "cannot assign reference ".ref($string)." as string"
         if (ref($string));
     $self->{chunks} = [];
     foreach my $chunk ($self->_chunking($string)) {
@@ -162,9 +185,9 @@ sub append ($$) {
     my ($self, $string) = @_;
     return $self->{diversion}->[-1]->append($string)
         if (@{$self->{diversion}} > 0);
-    die "cannot assign undefined string"
+    croak "cannot assign undefined string"
         if (not defined($string));
-    die "cannot assign reference as string"
+    croak "cannot assign reference as string"
         if (ref($string));
     if (   $self->{overwrite} eq 'once'
         or $self->{overwrite} eq 'always') {
@@ -244,11 +267,11 @@ sub fold ($$) {
     my ($self, $id) = @_;
     return $self->{diversion}->[-1]->fold($id)
         if (@{$self->{diversion}} > 0);
-    die "undefined folding object identifier"
+    croak "undefined folding object identifier"
         if (not defined($id));
     return undef if ($self->{storage} eq 'none');
     if (ref($id)) {
-        die "folding object not of class String::Divert"
+        croak "folding object not of class String::Divert"
             if (   UNIVERSAL::isa($id, "String::Divert")
                 or UNIVERSAL::isa($id, "String::Divert::__OVERLOAD__"));
         push(@{$self->{chunks}}, $id);
@@ -257,7 +280,7 @@ sub fold ($$) {
     else {
         my $object = $self->folding($id);
         $object = $self->new($id) if (not defined($object));
-        die "unable to create new folding object"
+        croak "unable to create new folding object"
             if (not defined($object));
         push(@{$self->{chunks}}, $object);
         return $object;
@@ -328,7 +351,7 @@ sub folder ($$;$) {
         #   configure folder
         my $test = sprintf($a, "foo");
         my ($id) = ($test =~ m|${b}()|s);
-        die "folder construction format and matching regular expression do not correspond"
+        croak "folder construction format and matching regular expression do not correspond"
             if (not defined($id) or (defined($id) and $id ne "foo"));
         $self->{foldermk} = $a;
         $self->{folderre} = $b;
@@ -346,7 +369,7 @@ sub folder ($$;$) {
 sub divert ($$) {
     my ($self, $id) = @_;
     my $object = $self->folding($id);
-    die "folding sub-object \"$id\" not found"
+    croak "folding sub-object \"$id\" not found"
         if (not defined($object));
     push(@{$self->{diversion}}, $object);
     return $self;
@@ -361,11 +384,12 @@ sub undivert ($;$) {
         for ($num = 1; $num <= @{$self->{diversion}}; $num++) {
             last if ($self->{diversion}->[-$num]->{name} eq $name);
         }
-        die "no object named \"$name\" found for undiversion"
+        croak "no object named \"$name\" found for undiversion"
             if ($num > @{$self->{diversion}});
     }
     $num = @{$self->{diversion}} if ($num == 0);
-    die "less number (".scalar(@{$self->{diversion}}).") of diversions active than requested ($num) to undivert"
+    croak "less number (".scalar(@{$self->{diversion}}).") of " .
+        "diversions active than requested ($num) to undivert"
         if ($num > @{$self->{diversion}});
     while ($num-- > 0) {
         pop(@{$self->{diversion}});
@@ -441,6 +465,7 @@ sub overload ($;$) {
 package String::Divert::__OVERLOAD__;
 
 our @ISA       = qw(Exporter String::Divert);
+our @EXPORT    = qw();
 our @EXPORT_OK = qw();
 
 #   define operator overloading
@@ -454,9 +479,9 @@ use overload (
      '<>'       => \&op_unfold,
      '>>'       => \&op_divert,
      '<<'       => \&op_undivert,
+     '='        => \&op_copyconst,
     #'${}'      => \&op_deref_string,
     #'%{}'      => \&op_deref_hash,
-    #'='        => \&op_copyconst,
     #'nomethod' => \&op_unknown,
      'fallback' => 0
 );
@@ -485,12 +510,6 @@ use overload (
 #    return $self;
 #}
 
-#sub op_copyconst {
-#    my ($self, $other, $reverse) = @_;
-#    #   intentionally do not copy at all
-#    return $self;
-#}
-
 #sub op_deref_string ($$$) {
 #    my $self = shift;
 #    return $self;
@@ -500,6 +519,18 @@ use overload (
 #    my $self = shift;
 #    return $self;
 #}
+
+sub op_copyconst {
+    my ($self, $other, $reverse) = @_;
+    if ($self->{copying} eq 'pass') {
+        #   object is just passed-through
+        return $self;
+    }
+    else { 
+        #   object is recursively cloned
+        return $self->clone();
+    }
+}
 
 sub op_string ($$$) {
     my ($self, $other, $rev) = @_;

@@ -1,6 +1,6 @@
 ##
 ##  String::Divert - String Object supporting Folding and Diversion
-##  Copyright (c) 2003 Ralf S. Engelschall <rse@engelschall.com>
+##  Copyright (c) 2003-2005 Ralf S. Engelschall <rse@engelschall.com>
 ##
 ##  This file is part of String::Divert, a Perl module providing
 ##  a string object supporting folding and diversion.
