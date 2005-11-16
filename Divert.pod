@@ -218,6 +218,13 @@ object is still kept in folded internal format. For permanently
 unfolding the contents in string object C<$x>, you have to use operation
 B<unfold>.
 
+=item SAPI: C<$bool = $x-E<gt>>B<bool>C<;>
+
+I<Content Unfolding (Temporary)>. This unfolds the contents of string
+object C<$x> until its value is already equivalent to the boolean true
+value or finally equivalent to the boolean false value. The contents of
+the string object is still kept in folded internal format.
+
 =back
 
 =head2 Content Folding
@@ -229,7 +236,9 @@ object:
 
 =item SAPI: [C<$y =>] C<$x-E<gt>>B<fold>C<($name);>
 
-=item SAPI: C<$x-E<gt>>B<fold>C<($y);>
+=item SAPI: [C<$y =>] C<$x-E<gt>>B<fold>C<($y);>
+
+=item SAPI: [C<$y =>] C<$x-E<gt>>B<fold>C<();>
 
 =item XAPI: [C<$y = (>]C<$x E<gt>E<gt>= $name>[C<)>]C<;>
 
@@ -239,7 +248,9 @@ I<Content Folding>. This folds the contents of string object C<$x> at
 the current position by appending a B<String::Divert> sub object (given
 in existing object C<$y> or created on-the-fly with name I<name>). The
 sub-object representing the folding is allowed to be re-appended by name
-or through C<$y>.
+or through C<$y>. If no name or object is given, an anonymous
+sub object is created on the fly (for use by method B<divert> without
+arguments).
 
 =item SAPI: [C<$string =>] C<$x-E<gt>>B<unfold>C<;>
 
@@ -261,6 +272,8 @@ contained folding sub-object with name C<$name>.
 
 =item SAPI: C<$string = $x-E<gt>>B<folder>C<($name);>
 
+=item SAPI: C<$string = $x-E<gt>>B<folder>C<();>
+
 I<Content Folding Textual Representation>. This configures (if
 the two argument form is used) or generates (if the one argument
 form is used) textual representation of a content folding. For
@@ -273,7 +286,9 @@ the name of the folding object. The defaults are "C<{#%s#}>" and
 "C<\{#([a-zA-Z_][a-zA-Z0-9_]*)#\}>". In the one argument form, the
 function applies C<$name> to the previously configured C<$format> and
 returns the result for inclusion into a string which in turn is assigned
-or appended to the string object.
+or appended to the string object. If no C<$name> is given, an anonymous
+folder is returned on the fly (for use by method B<divert> without
+arguments).
 
 =back
 
@@ -288,6 +303,8 @@ B<String::Divert> object:
 
 =item SAPI: [C<$x =>] C<$x-E<gt>>B<divert>C<($y);>
 
+=item SAPI: [C<$x =>] C<$x-E<gt>>B<divert>C<();>
+
 =item XAPI: C<$x E<gt>E<gt> $name;>
 
 =item XAPI: C<$x E<gt>E<gt> $y;>
@@ -295,7 +312,9 @@ B<String::Divert> object:
 I<Content Diversion Activation>. This activates in string object C<$x>
 a content diversion to a sub-object (given by name C<$name> or object
 reference C<$y>). The diversion target should be a folded sub-object of
-C<$x>, but is not technically required.
+C<$x>, but is not technically required. If no C<$name> or object C<$y>
+is specified, a diversion is activated to the last folder in the current
+diversion.
 
 =item SAPI: [C<$x =>] C<$x-E<gt>>B<undivert>C<($num);>
 

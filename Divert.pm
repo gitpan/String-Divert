@@ -37,7 +37,7 @@ use warnings;
 use Carp;
 require Exporter;
 
-our $VERSION   = '0.94';
+our $VERSION   = '0.95';
 
 our @ISA       = qw(Exporter);
 our @EXPORT    = qw();
@@ -51,14 +51,16 @@ sub new ($;$) {
     my $self = {};
     bless ($self, $class);
 
-    $self->{name}      = (defined($name) ? $name : '');
-    $self->{overwrite} = 'none';
-    $self->{storage}   = 'all';
-    $self->{copying}   = 'pass';
-    $self->{chunks}    = [ '' ];
-    $self->{diversion} = [];
-    $self->{foldermk}  = '{#%s#}';
-    $self->{folderre}  = '\{#([a-zA-Z_][a-zA-Z0-9_]*)#\}';
+    $name ||= "";
+
+    $self->{name}      = $name;                             # name of object
+    $self->{overwrite} = 'none';                            # overwrite mode (none|once|always)
+    $self->{storage}   = 'all';                             # storage mode (none|fold|all)
+    $self->{copying}   = 'pass';                            # copying mode (pass|clone)
+    $self->{chunks}    = [];                                # string chunks
+    $self->{diversion} = [];                                # stack of active diversions
+    $self->{foldermk}  = '{#%s#}';                          # folder text representation format
+    $self->{folderre}  = '\{#([a-zA-Z_][a-zA-Z0-9_]*)#\}';  # folder text representation regexp
 
     return $self;
 }
@@ -73,6 +75,8 @@ sub destroy ($) {
 
 #   object destruction (implicit)
 sub DESTROY ($) {
+    $_[0]->overload(0);
+    bless $_[0], 'UNIVERSAL';
     return;
 }
 
@@ -108,7 +112,7 @@ sub overwrite ($;$) {
         if (@{$self->{diversion}} > 0);
     my $old_mode = $self->{overwrite};
     if (defined($mode)) {
-        croak "invalid mode argument"
+        croak "invalid overwrite mode argument"
             if ($mode !~ m/^(none|once|always)$/);
         $self->{overwrite} = $mode;
     }
@@ -122,7 +126,7 @@ sub storage ($;$) {
         if (@{$self->{diversion}} > 0);
     my $old_mode = $self->{storage};
     if (defined($mode)) {
-        croak "invalid mode argument"
+        croak "invalid storage mode argument"
             if ($mode !~ m/^(none|fold|all)$/);
         $self->{storage} = $mode;
     }
@@ -132,9 +136,11 @@ sub storage ($;$) {
 #   operation: set/get copy constructor mode
 sub copying ($;$) {
     my ($self, $mode) = @_;
+    return $self->{diversion}->[-1]->copying($mode)
+        if (@{$self->{diversion}} > 0);
     my $old_mode = $self->{copying};
     if (defined($mode)) {
-        croak "invalid mode argument"
+        croak "invalid copying mode argument"
             if ($mode !~ m/^(clone|pass)$/);
         $self->{copying} = $mode;
     }
@@ -142,7 +148,7 @@ sub copying ($;$) {
 }
 
 #   internal: split string into chunks
-sub _chunking ($) {
+sub _chunking ($$) {
     my ($self, $string) = @_;
     my @chunks = ();
     my $folderre = $self->{folderre};
@@ -154,7 +160,7 @@ sub _chunking ($) {
         if ($self->{storage} ne 'none') {
             my $object = $self->folding($id);
             $object = $self->new($id) if (not defined($object));
-            croak "cannot reuse or create folding sub object \"$id\""
+            croak "cannot create new folding sub object \"$id\""
                 if (not defined($object));
             push(@chunks, $object);
         }
@@ -164,51 +170,52 @@ sub _chunking ($) {
     return @chunks;
 }
 
-#   operation: assign a string
+#   operation: assign an object
 sub assign ($$) {
-    my ($self, $string) = @_;
-    return $self->{diversion}->[-1]->assign($string)
+    my ($self, $obj) = @_;
+    return $self->{diversion}->[-1]->assign($obj)
         if (@{$self->{diversion}} > 0);
-    croak "cannot assign undefined string"
-        if (not defined($string));
-    croak "cannot assign reference ".ref($string)." as string"
-        if (ref($string));
-    $self->{chunks} = [];
-    foreach my $chunk ($self->_chunking($string)) {
-        push(@{$self->{chunks}}, $chunk);
+    croak "cannot assign undefined object"
+        if (not defined($obj));
+    if (&String::Divert::_isobj($obj)) {
+        $self->{chunks} = [ $obj ];
+    }
+    else {
+        $self->{chunks} = [];
+        foreach my $chunk ($self->_chunking($obj)) {
+            push(@{$self->{chunks}}, $chunk);
+        }
     }
     return $self;
 }
 
-#   operation: append a string
+#   operation: append an object
 sub append ($$) {
-    my ($self, $string) = @_;
-    return $self->{diversion}->[-1]->append($string)
+    my ($self, $obj) = @_;
+    return $self->{diversion}->[-1]->append($obj)
         if (@{$self->{diversion}} > 0);
-    croak "cannot assign undefined string"
-        if (not defined($string));
-    croak "cannot assign reference as string"
-        if (ref($string));
+    croak "cannot append undefined object"
+        if (not defined($obj));
     if (   $self->{overwrite} eq 'once'
         or $self->{overwrite} eq 'always') {
-        $self->{chunks} = [];
-        foreach my $chunk ($self->_chunking($string)) {
-            push(@{$self->{chunks}}, $chunk);
-        }
+        $self->assign($obj);
         $self->{overwrite} = 'none'
             if ($self->{overwrite} eq 'once');
     }
     else {
-        foreach my $chunk ($self->_chunking($string)) {
-            if (ref($chunk)) {
-                push(@{$self->{chunks}}, $chunk);
-            }
-            else {
-                if (ref($self->{chunks}->[-1])) {
+        if (&String::Divert::_isobj($obj)) {
+            push(@{$self->{chunks}}, $obj);
+        }
+        else {
+            foreach my $chunk ($self->_chunking($obj)) {
+                if (ref($chunk) or (@{$self->{chunks}} > 0 and ref($self->{chunks}->[-1]))) {
                     push(@{$self->{chunks}}, $chunk);
                 }
-                else {
+                elsif (@{$self->{chunks}} > 0) {
                     $self->{chunks}->[-1] .= $chunk;
+                }
+                else {
+                    $self->{chunks} = [ $chunk ];
                 }
             }
         }
@@ -219,9 +226,9 @@ sub append ($$) {
 #   operation: unfold (and return) string contents temporarily
 sub string ($) {
     my ($self) = @_;
-    my $string = '';
     return $self->{diversion}->[-1]->string()
         if (@{$self->{diversion}} > 0);
+    my $string = '';
     foreach my $chunk (@{$self->{chunks}}) {
         if (ref($chunk)) {
             my $prefix = '';
@@ -247,9 +254,9 @@ sub string ($) {
 #   operation: unfold string contents temporarily until already true or finally false
 sub bool ($) {
     my ($self) = @_;
-    my $string = '';
     return $self->{diversion}->[-1]->bool()
         if (@{$self->{diversion}} > 0);
+    my $string = '';
     foreach my $chunk (@{$self->{chunks}}) {
         if (ref($chunk)) {
             $string .= $chunk->string(); # recursion!
@@ -262,18 +269,23 @@ sub bool ($) {
     return 0;
 }
 
+#   internal: create an anonymous object name
+my $_anonymous_count = 1;
+sub _anonymous_name () {
+    return sprintf("ANONYMOUS:%d", $_anonymous_count++);
+}
+
 #   operation: append folding sub-object
-sub fold ($$) {
+sub fold ($;$) {
     my ($self, $id) = @_;
     return $self->{diversion}->[-1]->fold($id)
         if (@{$self->{diversion}} > 0);
-    croak "undefined folding object identifier"
-        if (not defined($id));
     return undef if ($self->{storage} eq 'none');
+    $id = &String::Divert::_anonymous_name()
+        if (not defined($id));
     if (ref($id)) {
         croak "folding object not of class String::Divert"
-            if (   UNIVERSAL::isa($id, "String::Divert")
-                or UNIVERSAL::isa($id, "String::Divert::__OVERLOAD__"));
+            if (not &String::Divert::_isobj($id));
         push(@{$self->{chunks}}, $id);
         return $id;
     }
@@ -293,8 +305,16 @@ sub unfold ($) {
     return $self->{diversion}->[-1]->unfold()
         if (@{$self->{diversion}} > 0);
     my $string = $self->string();
-    $self->{chunks} = [ $string ];
+    $self->{chunks} = $string ne '' ? [ $string ] : [];
     return $string;
+}
+
+#   internal: check whether object is a String::Divert object
+sub _isobj ($) {
+    my ($obj) = @_;
+    return (    ref($obj)
+            and (   UNIVERSAL::isa($obj, "String::Divert")
+                 or UNIVERSAL::isa($obj, "String::Divert::__OVERLOAD__")));
 }
 
 #   internal: compare whether two objects are the same
@@ -316,7 +336,7 @@ sub folding ($;$) {
     return $self->{diversion}->[-1]->folding($id)
         if (@{$self->{diversion}} > 0);
     if (defined($id)) {
-        my $folding = undef;
+        my $folding; $folding = undef;
         foreach my $chunk (@{$self->{chunks}}) {
             if (ref($chunk)) {
                 if (   (ref($id)     and &String::Divert::_isobjeq($chunk, $id))
@@ -345,9 +365,9 @@ sub folding ($;$) {
 }
 
 #   operation: configure or generate textually represented folding object
-sub folder ($$;$) {
+sub folder ($;$$) {
     my ($self, $a, $b) = @_;
-    if (defined($b)) {
+    if (defined($a) and defined($b)) {
         #   configure folder
         my $test = sprintf($a, "foo");
         my ($id) = ($test =~ m|${b}()|s);
@@ -360,17 +380,34 @@ sub folder ($$;$) {
     else {
         #   create folder
         return "" if ($self->{storage} eq 'none');
+        $a = &String::Divert::_anonymous_name()
+            if (not defined($a));
         my $folder = sprintf($self->{foldermk}, $a);
         return $folder;
     }
 }
 
 #   operation: push diversion of operations to sub-object
-sub divert ($$) {
+sub divert ($;$) {
     my ($self, $id) = @_;
-    my $object = $self->folding($id);
-    croak "folding sub-object \"$id\" not found"
-        if (not defined($object));
+    my $object; $object = undef;
+    if (not defined($id)) {
+        #   choose last folding object
+        foreach my $chunk ($self->folding()) {
+            if (ref($chunk)) {
+                $object = $chunk;
+                last;
+            }
+        }
+        croak "no last folding sub-object found"
+            if (not defined($object));
+    }
+    else {
+        #   choose named folding object
+        $object = $self->folding($id);
+        croak "folding sub-object \"$id\" not found"
+            if (not defined($object));
+    }
     push(@{$self->{diversion}}, $object);
     return $self;
 }
@@ -380,6 +417,7 @@ sub undivert ($;$) {
     my ($self, $num) = @_;
     $num = 1 if (not defined($num));
     if ($num !~ m|^\d+$|) {
+        #   lookup number by name
         my $name = $num;
         for ($num = 1; $num <= @{$self->{diversion}}; $num++) {
             last if ($self->{diversion}->[-$num]->{name} eq $name);
@@ -401,11 +439,11 @@ sub undivert ($;$) {
 sub diversion ($) {
     my ($self) = @_;
     if (not wantarray) {
-        #   return last diversion only
+        #   return last diversion only (or undef if none exist)
         return $self->{diversion}->[-1];
     }
     else {
-        #   return all diversions (in reverse order of activation)
+        #   return all diversions (in reverse order of activation) (or empty array if none exist)
         return reverse(@{$self->{diversion}});
     }
 }
