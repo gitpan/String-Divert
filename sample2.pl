@@ -16,14 +16,9 @@ $html .=
     "    " . $html->folder("body") .
     "  </body>\n" .
     "</html>\n";
-
-#   generate header
-$html >> "head";
-$html .= "<title>foo</title>\n";
-$html << 1;
+$html >> "body";
 
 #   generate body
-$html >> "body";
 $html .= "<table>\n" .
          "  <tr>\n" .
          "   <td>\n" .
@@ -35,6 +30,11 @@ $html .= "<table>\n" .
          "  </tr>\n" .
          "</table>\n";
 
+#   generate header
+$html >> "head";
+$html .= "<title>foo</title>\n";
+$html << 1;
+
 #   generate left contents
 $html >> "left";
 $html .= "bar1\n" .
@@ -45,6 +45,7 @@ $html << 1;
 $html >> "right";
 $html .= "quux1\n" .
          "quux2\n";
+$html << 1;
 
 #   undivert all diversions and output unfolded HTML
 $html << 0;

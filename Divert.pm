@@ -37,11 +37,17 @@ use warnings;
 use Carp;
 require Exporter;
 
-our $VERSION   = '0.95';
+our $VERSION   = '0.96';
 
 our @ISA       = qw(Exporter);
 our @EXPORT    = qw();
 our @EXPORT_OK = qw();
+
+#   internal: create an anonymous object name
+my $_anonymous_count = 1;
+sub _anonymous_name () {
+    return sprintf("ANONYMOUS:%d", $_anonymous_count++);
+}
 
 #   object construction
 sub new ($;$) {
@@ -51,7 +57,7 @@ sub new ($;$) {
     my $self = {};
     bless ($self, $class);
 
-    $name ||= "";
+    $name ||= &String::Divert::_anonymous_name();
 
     $self->{name}      = $name;                             # name of object
     $self->{overwrite} = 'none';                            # overwrite mode (none|once|always)
@@ -61,6 +67,7 @@ sub new ($;$) {
     $self->{diversion} = [];                                # stack of active diversions
     $self->{foldermk}  = '{#%s#}';                          # folder text representation format
     $self->{folderre}  = '\{#([a-zA-Z_][a-zA-Z0-9_]*)#\}';  # folder text representation regexp
+    $self->{folderlst} = undef;                             # folder object of last folding operation
 
     return $self;
 }
@@ -179,11 +186,13 @@ sub assign ($$) {
         if (not defined($obj));
     if (&String::Divert::_isobj($obj)) {
         $self->{chunks} = [ $obj ];
+        $self->{folderlst} = $obj if (ref($obj));
     }
     else {
         $self->{chunks} = [];
         foreach my $chunk ($self->_chunking($obj)) {
             push(@{$self->{chunks}}, $chunk);
+            $self->{folderlst} = $chunk if (ref($chunk));
         }
     }
     return $self;
@@ -205,11 +214,13 @@ sub append ($$) {
     else {
         if (&String::Divert::_isobj($obj)) {
             push(@{$self->{chunks}}, $obj);
+            $self->{folderlst} = $obj if (ref($obj));
         }
         else {
             foreach my $chunk ($self->_chunking($obj)) {
                 if (ref($chunk) or (@{$self->{chunks}} > 0 and ref($self->{chunks}->[-1]))) {
                     push(@{$self->{chunks}}, $chunk);
+                    $self->{folderlst} = $chunk if (ref($chunk));
                 }
                 elsif (@{$self->{chunks}} > 0) {
                     $self->{chunks}->[-1] .= $chunk;
@@ -228,9 +239,22 @@ sub string ($) {
     my ($self) = @_;
     return $self->{diversion}->[-1]->string()
         if (@{$self->{diversion}} > 0);
+    return $self->_string([]);
+}
+
+#   internal: string() operation with loop detection
+sub _string ($$) {
+    my ($self, $visit) = @_;
     my $string = '';
+    if (grep { &String::Divert::_isobjeq($_, $self) } @{$visit}) {
+        croak "folding loop detected: " .
+            join(" -> ", map { $_->name() } @{$visit}) . 
+            " -> " . $self->name();
+    }
+    push(@{$visit}, $self);
     foreach my $chunk (@{$self->{chunks}}) {
         if (ref($chunk)) {
+            #   folding loop detection
             my $prefix = '';
             #   check for existing prefix
             #   (keep in mind that m|([^\n]+)$|s _DOES NOT_
@@ -240,7 +264,7 @@ sub string ($) {
                 $prefix = $1;
                 $prefix =~ s|[^ \t]| |sg;
             }
-            my $block = $chunk->string(); # recursion!
+            my $block = $chunk->_string($visit); # recursion!
             $block =~ s|\n(?=.)|\n$prefix|sg if ($prefix ne '');
             $string .= $block;
         }
@@ -248,6 +272,7 @@ sub string ($) {
             $string .= $chunk;
         }
     }
+    pop(@{$visit});
     return $string;
 }
 
@@ -269,12 +294,6 @@ sub bool ($) {
     return 0;
 }
 
-#   internal: create an anonymous object name
-my $_anonymous_count = 1;
-sub _anonymous_name () {
-    return sprintf("ANONYMOUS:%d", $_anonymous_count++);
-}
-
 #   operation: append folding sub-object
 sub fold ($;$) {
     my ($self, $id) = @_;
@@ -287,6 +306,7 @@ sub fold ($;$) {
         croak "folding object not of class String::Divert"
             if (not &String::Divert::_isobj($id));
         push(@{$self->{chunks}}, $id);
+        $self->{folderlst} = $id;
         return $id;
     }
     else {
@@ -295,6 +315,7 @@ sub fold ($;$) {
         croak "unable to create new folding object"
             if (not defined($object));
         push(@{$self->{chunks}}, $object);
+        $self->{folderlst} = $object;
         return $object;
     }
 }
@@ -306,6 +327,7 @@ sub unfold ($) {
         if (@{$self->{diversion}} > 0);
     my $string = $self->string();
     $self->{chunks} = $string ne '' ? [ $string ] : [];
+    $self->{folderlst} = undef;
     return $string;
 }
 
@@ -333,8 +355,6 @@ sub _isobjeq ($$) {
 #   operation: lookup particular or all folding sub-object(s)
 sub folding ($;$) {
     my ($self, $id) = @_;
-    return $self->{diversion}->[-1]->folding($id)
-        if (@{$self->{diversion}} > 0);
     if (defined($id)) {
         my $folding; $folding = undef;
         foreach my $chunk (@{$self->{chunks}}) {
@@ -344,7 +364,7 @@ sub folding ($;$) {
                     $folding = $chunk;
                     last;
                 }
-                $folding = $chunk->folding($id);
+                $folding = $chunk->folding($id); # recursion!
                 last if (defined($folding));
             }
         }
@@ -393,11 +413,9 @@ sub divert ($;$) {
     my $object; $object = undef;
     if (not defined($id)) {
         #   choose last folding object
-        foreach my $chunk ($self->folding()) {
-            if (ref($chunk)) {
-                $object = $chunk;
-                last;
-            }
+        foreach my $obj (reverse ($self, @{$self->{diversion}})) {
+            $object = $obj->{folderlst};
+            last if (defined($object));
         }
         croak "no last folding sub-object found"
             if (not defined($object));
@@ -419,7 +437,7 @@ sub undivert ($;$) {
     if ($num !~ m|^\d+$|) {
         #   lookup number by name
         my $name = $num;
-        for ($num = 1; $num <= @{$self->{diversion}}; $num++) {
+        for (my $num = 1; $num <= @{$self->{diversion}}; $num++) {
             last if ($self->{diversion}->[-$num]->{name} eq $name);
         }
         croak "no object named \"$name\" found for undiversion"

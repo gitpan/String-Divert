@@ -23,7 +23,7 @@
 ##
 
 use 5.006;
-use Test::More tests => 38;
+use Test::More tests => 37;
 
 #   test: module loading
 BEGIN { use_ok('String::Divert') };
@@ -34,7 +34,6 @@ ok(defined($x), "object creation");
 $x->destroy;
 $x = new String::Divert;
 ok(defined($x), "object (re)creation");
-ok($x->name() eq "", "object name");
 $x->name("xx");
 ok($x->name() eq "xx", "overwritten object name");
 $x->name("x");

@@ -263,10 +263,13 @@ use operation B<string>.
 
 =item SAPI: C<$y = $x-E<gt>>B<folding>C<($name);>
 
+=item SAPI: C<@y = $x-E<gt>>B<folding>C<();>
+
 =item XAPI: C<$y = ($x E<lt>E<lt>= $name);>
 
 I<Content Folding Lookup>. This lookups in string object C<$x> the
-contained folding sub-object with name C<$name>.
+contained folding sub-object with name C<$name>. If C<$name> is not
+specified, it returns a list of all folding sub-objects.
 
 =item SAPI: C<$x-E<gt>>B<folder>C<($format, $regex);>
 
@@ -313,8 +316,8 @@ I<Content Diversion Activation>. This activates in string object C<$x>
 a content diversion to a sub-object (given by name C<$name> or object
 reference C<$y>). The diversion target should be a folded sub-object of
 C<$x>, but is not technically required. If no C<$name> or object C<$y>
-is specified, a diversion is activated to the last folder in the current
-diversion.
+is specified, a diversion is activated to the folder which was
+inserted last into the currently or previously active objects.
 
 =item SAPI: [C<$x =>] C<$x-E<gt>>B<undivert>C<($num);>
 
@@ -359,14 +362,9 @@ the structured HTML code in a nested, clean and intuitive fashion:
      "    " . $html->folder("body") .
      "  </body>\n" .
      "</html>\n";
-
- #   generate header
- $html >> "head";
- $html .= "<title>foo</title>\n";
- $html << 1;
+ $html >> "body";
 
  #   generate body
- $html >> "body";
  $html .= "<table>\n" .
           "  <tr>\n" .
           "   <td>\n" .
@@ -378,15 +376,22 @@ the structured HTML code in a nested, clean and intuitive fashion:
           "  </tr>\n" .
           "</table>\n";
 
+ #   generate header
+ $html >> "head";
+ $html .= "<title>foo</title>\n";
+ $html << 1;
+
  #   generate left contents
  $html >> "left";
  $html .= "bar1\n" .
           "bar2\n";
+ $html << 1;
 
  #   generate right contents
  $html >> "right";
  $html .= "quux1\n" .
           "quux2\n";
+ $html << 1;
 
  #   undivert all diversions and output unfolded HTML
  $html << 0;
